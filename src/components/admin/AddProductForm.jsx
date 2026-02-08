@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Upload } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db, storage } from '@/lib/firebase';
+import { collection, addDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,28 +32,10 @@ const AddProductForm = ({ onClose, onSuccess }) => {
     if (!file) return;
 
     try {
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
-
-      if (!isConfigured) {
-        // Convert image to base64 for localStorage persistence
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64String = reader.result;
-          setFormData(prev => ({ ...prev, image_url: base64String }));
-          toast({
-            title: 'Image Selected',
-            description: 'Image will be stored locally',
-          });
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      // For Supabase mode: upload to storage
+      // Firebase Storage upload
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const storageRef = ref(storage, `product-images/${fileName}`);
 
       // Show preview while uploading
       const reader = new FileReader();
@@ -60,17 +44,11 @@ const AddProductForm = ({ onClose, onSuccess }) => {
       };
       reader.readAsDataURL(file);
 
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, file);
+      // Upload to Firebase
+      const snapshot = await uploadBytes(storageRef, file);
+      const publicUrl = await getDownloadURL(snapshot.ref);
 
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
-
-      setFormData(prev => ({ ...prev, image_url: data.publicUrl }));
+      setFormData(prev => ({ ...prev, image_url: publicUrl }));
 
       toast({
         title: 'Image Uploaded',
@@ -78,11 +56,17 @@ const AddProductForm = ({ onClose, onSuccess }) => {
       });
     } catch (error) {
       console.error('Upload error:', error);
-      toast({
-        title: 'Upload Failed',
-        description: error.message,
-        variant: 'destructive'
-      });
+      // Fallback to local base64 for demo
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result;
+        setFormData(prev => ({ ...prev, image_url: base64String }));
+        toast({
+          title: 'Image Selected (Local)',
+          description: 'Image stored locally (Firebase upload failed)',
+        });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -91,64 +75,40 @@ const AddProductForm = ({ onClose, onSuccess }) => {
     setLoading(true);
 
     try {
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
+      const newProduct = {
+        name: formData.name,
+        description: formData.description,
+        price: parseFloat(formData.price),
+        stock_quantity: parseInt(formData.stock_quantity),
+        image_url: formData.image_url,
+        created_at: new Date().toISOString()
+      };
 
-      if (!isConfigured) {
-        // Demo mode simulation
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-
-        const newProduct = {
-          id: Math.floor(Math.random() * 10000), // Random ID
-          created_at: new Date().toISOString(),
-          name: formData.name,
-          description: formData.description,
-          price: parseFloat(formData.price),
-          stock_quantity: parseInt(formData.stock_quantity),
-          image_url: formData.image_url || null
-        };
-
-        // Add to mock data
-        mockProducts.unshift(newProduct);
-
-        // Save to LocalStorage
-        const storedProducts = localStorage.getItem('bakery_products');
-        // If storage is empty, use mockProducts as the base, otherwise use stored data
-        // This prevents losing the default items when adding the first new item
-        const currentProducts = storedProducts ? JSON.parse(storedProducts) : [...mockProducts];
-
-        const updatedProducts = [newProduct, ...currentProducts];
-        localStorage.setItem('bakery_products', JSON.stringify(updatedProducts));
-
+      // Try adding to Firestore
+      try {
+        await addDoc(collection(db, 'products'), newProduct);
         toast({
-          title: 'Product Added (Demo Mode)',
-          description: `${formData.name} saved to local storage`,
+          title: 'Product Added',
+          description: `${formData.name} has been added successfully`,
         });
-
-        onSuccess();
-        onClose();
-        setLoading(false);
-        return;
+      } catch (error) {
+        console.warn("Firestore add failed, using local storage", error);
+        toast({
+          title: 'Product Added (Local)',
+          description: `${formData.name} added to local storage (Firestore failed)`,
+        });
       }
 
-      const { error } = await supabase
-        .from('products')
-        .insert([
-          {
-            name: formData.name,
-            description: formData.description,
-            price: parseFloat(formData.price),
-            stock_quantity: parseInt(formData.stock_quantity),
-            image_url: formData.image_url
-          }
-        ]);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Product Added',
-        description: `${formData.name} has been added successfully`,
-      });
+      // ALWAYS Update LocalStorage for hybrid/demo mode consistency
+      const storedProducts = localStorage.getItem('bakery_products');
+      const currentProducts = storedProducts ? JSON.parse(storedProducts) : [...mockProducts];
+      // Generate a random ID for local storage if we didn't get one from Firestore (or even if we did, for consistency in this hybrid app)
+      const localProduct = {
+        ...newProduct,
+        id: Math.floor(Math.random() * 10000)
+      };
+      const updatedProducts = [localProduct, ...currentProducts];
+      localStorage.setItem('bakery_products', JSON.stringify(updatedProducts));
 
       onSuccess();
       onClose();

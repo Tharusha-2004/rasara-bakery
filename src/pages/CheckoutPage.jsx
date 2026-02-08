@@ -3,7 +3,8 @@ import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '@/contexts/CartContext';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,59 +38,46 @@ const CheckoutPage = () => {
     setLoading(true);
 
     try {
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert([
-          {
-            customer_name: formData.name,
-            customer_email: formData.email,
-            customer_phone: formData.phone,
-            delivery_address: formData.address,
-            status: 'pending',
-            total_price: total
-          }
-        ])
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Create order items
+      // Prepare order data with nested items
       const orderItems = cartItems.map(item => ({
-        order_id: order.id,
         product_id: item.id,
         quantity: item.quantity,
-        price_at_purchase: item.price
+        price_at_purchase: item.price,
+        // Snapshot product details to preserve history even if product changes
+        products: {
+          name: item.name,
+          image_url: item.image_url
+        }
       }));
 
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
+      const newOrder = {
+        customer_name: formData.name,
+        customer_email: formData.email,
+        customer_phone: formData.phone,
+        delivery_address: formData.address,
+        status: 'pending',
+        total_price: total,
+        created_at: new Date().toISOString(),
+        items: orderItems // Nest items directly in order document
+      };
 
-      if (itemsError) throw itemsError;
+      // Create order in Firestore
+      const docRef = await addDoc(collection(db, 'orders'), newOrder);
+      const orderId = docRef.id;
 
-      // Update product stock
+      // Update product stock (Client-side transaction simulation)
       for (const item of cartItems) {
-        const { error: stockError } = await supabase.rpc('decrement_stock', {
-          product_id: item.id,
-          quantity: item.quantity
-        });
+        try {
+          const productRef = doc(db, 'products', item.id);
+          const productSnap = await getDoc(productRef);
 
-        if (stockError) {
-          // If RPC doesn't exist, use direct update
-          const { data: product } = await supabase
-            .from('products')
-            .select('stock_quantity')
-            .eq('id', item.id)
-            .single();
-
-          if (product) {
-            await supabase
-              .from('products')
-              .update({ stock_quantity: product.stock_quantity - item.quantity })
-              .eq('id', item.id);
+          if (productSnap.exists()) {
+            const currentStock = productSnap.data().stock_quantity;
+            const newStock = Math.max(0, currentStock - item.quantity);
+            await updateDoc(productRef, { stock_quantity: newStock });
           }
+        } catch (stockError) {
+          console.error(`Failed to update stock for ${item.name}`, stockError);
         }
       }
 
@@ -99,11 +87,13 @@ const CheckoutPage = () => {
       // Show success and navigate
       toast({
         title: 'Order Placed Successfully!',
-        description: `Your order #${order.id.slice(0, 8)} has been received`,
+        description: `Your order #${orderId.slice(0, 8)} has been received`,
       });
 
-      navigate('/order-confirmation', { state: { order } });
+      // Pass the order object with the generated ID
+      navigate('/order-confirmation', { state: { order: { ...newOrder, id: orderId } } });
     } catch (error) {
+      console.error("Order placement error", error);
       toast({
         title: 'Error placing order',
         description: error.message,

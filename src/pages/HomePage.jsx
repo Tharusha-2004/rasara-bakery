@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
 import { ShoppingCart, AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
@@ -23,23 +24,8 @@ const HomePage = () => {
 
   const fetchProducts = async () => {
     try {
-      // Check if Supabase is properly configured
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
-
-      if (!isConfigured) {
-        console.log('Demo mode: Using mock products');
-        setProducts(mockProducts);
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const querySnapshot = await getDocs(collection(db, 'products'));
+      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
       if (data && data.length > 0) {
         setProducts(data);
@@ -47,12 +33,15 @@ const HomePage = () => {
         setProducts(mockProducts);
       }
     } catch (error) {
-      console.warn('Error loading products from Supabase, using mock data:', error);
+      console.warn('Error loading products from Firebase, using mock data:', error);
       setProducts(mockProducts);
-      toast({
-        title: 'Demo Mode',
-        description: 'Showing sample products (database connection failed).',
-      });
+      // Only show toast if it's not a permission error (which is expected if config is missing)
+      if (error.code !== 'permission-denied' && error.code !== 'unavailable') {
+        toast({
+          title: 'Demo Mode',
+          description: 'Showing sample products (database connection failed).',
+        });
+      }
     } finally {
       setLoading(false);
     }

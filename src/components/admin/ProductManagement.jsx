@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { mockProducts } from '@/data/mockProducts';
@@ -42,40 +43,44 @@ const ProductManagement = () => {
 
     setCacheLoading('products', true);
     try {
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
+      const querySnapshot = await getDocs(collection(db, 'products'));
+      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      if (!isConfigured) {
-        // Load from localStorage or mock data
+      if (data && data.length > 0) {
+        setProducts(data);
+        setCachedData('products', data);
+      } else {
+        // Fallback to mock data/local storage if Firestore is empty or fails
         const storedProducts = localStorage.getItem('bakery_products');
         if (storedProducts) {
           const parsedProducts = JSON.parse(storedProducts);
           setProducts(parsedProducts);
           setCachedData('products', parsedProducts);
         } else {
-          // Initialize with mock data if nothing in storage
-          setProducts([...mockProducts]);
-          localStorage.setItem('bakery_products', JSON.stringify(mockProducts));
+          setProducts(mockProducts);
           setCachedData('products', mockProducts);
         }
-        setLoading(false);
-        return;
+      }
+    } catch (error) {
+      console.warn("Firestore error, falling back to local/mock:", error);
+      // Fallback to mock data/local storage
+      const storedProducts = localStorage.getItem('bakery_products');
+      if (storedProducts) {
+        const parsedProducts = JSON.parse(storedProducts);
+        setProducts(parsedProducts);
+        setCachedData('products', parsedProducts);
+      } else {
+        setProducts(mockProducts);
+        setCachedData('products', mockProducts);
       }
 
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProducts(data || []);
-      setCachedData('products', data || []);
-    } catch (error) {
-      toast({
-        title: 'Error loading products',
-        description: error.message,
-        variant: 'destructive'
-      });
+      if (error.code !== 'permission-denied' && error.code !== 'unavailable') {
+        toast({
+          title: 'Error loading products',
+          description: error.message,
+          variant: 'destructive'
+        });
+      }
     } finally {
       setLoading(false);
       setCacheLoading('products', false);
@@ -86,12 +91,12 @@ const ProductManagement = () => {
     if (!deletingProduct) return;
 
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', deletingProduct.id);
-
-      if (error) throw error;
+      // Try to delete from Firestore
+      try {
+        await deleteDoc(doc(db, "products", deletingProduct.id));
+      } catch (e) {
+        console.warn("Could not delete from Firestore (might be mock mode)", e);
+      }
 
       toast({
         title: 'Product Deleted',
@@ -99,16 +104,9 @@ const ProductManagement = () => {
       });
 
       // Update LocalStorage for demo mode
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
-
-      if (!isConfigured) {
-        const updatedProducts = products.filter(p => p.id !== deletingProduct.id);
-        setProducts(updatedProducts); // Optimistic update
-        localStorage.setItem('bakery_products', JSON.stringify(updatedProducts));
-      } else {
-        fetchProducts();
-      }
+      const updatedProducts = products.filter(p => p.id !== deletingProduct.id);
+      setProducts(updatedProducts); // Optimistic update
+      localStorage.setItem('bakery_products', JSON.stringify(updatedProducts));
 
       // Invalidate cache after delete
       invalidateCache('products');

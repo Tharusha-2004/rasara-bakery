@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import {
   Dialog,
@@ -14,34 +13,14 @@ const OrderDetailsModal = ({ order, onClose }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchOrderItems();
-  }, [order.id]);
-
-  const fetchOrderItems = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('order_items')
-        .select(`
-          *,
-          products (
-            name,
-            image_url
-          )
-        `)
-        .eq('order_id', order.id);
-
-      if (error) throw error;
-      setOrderItems(data || []);
-    } catch (error) {
-      toast({
-        title: 'Error loading order items',
-        description: error.message,
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
+    if (order.items && Array.isArray(order.items)) {
+      setOrderItems(order.items);
+    } else {
+      // Fallback if no items (e.g. old data or mock data issue)
+      setOrderItems([]);
     }
-  };
+    setLoading(false);
+  }, [order]);
 
   return (
     <Dialog open={true} onOpenChange={onClose}>

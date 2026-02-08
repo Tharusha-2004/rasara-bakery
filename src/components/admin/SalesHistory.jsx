@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, TrendingUp, DollarSign, Package } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import { useToast } from '@/components/ui/use-toast';
 import { useAdminData } from '@/contexts/AdminDataContext';
 
@@ -31,42 +32,46 @@ const SalesHistory = () => {
 
     setCacheLoading('salesData', true);
     try {
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
+      // Fetch orders to derive sales data
+      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const orders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      if (!isConfigured) {
-        // Mock sales data
-        setSalesData([]);
-        setCachedData('salesData', []);
-        setLoading(false);
-        return;
-      }
-
-      // Query order_items with product details instead of sales_history
-      const { data, error } = await supabase
-        .from('order_items')
-        .select(`
-          *,
-          products (
-            name,
-            price
-          ),
-          orders (
-            created_at
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-      setSalesData(data || []);
-      setCachedData('salesData', data || []);
-    } catch (error) {
-      toast({
-        title: 'Error loading sales data',
-        description: error.message,
-        variant: 'destructive'
+      // Flatten orders into sales items for the table
+      const allSales = [];
+      orders.forEach(order => {
+        if (order.items && Array.isArray(order.items)) {
+          order.items.forEach(item => {
+            allSales.push({
+              id: `${order.id}_${item.product_id}`, // Artificial ID
+              products: item.products, // { name, image_url }
+              quantity: item.quantity,
+              price_at_purchase: item.price_at_purchase,
+              created_at: order.created_at,
+              orders: { created_at: order.created_at } // tailored for existing UI code
+            });
+          });
+        }
       });
+
+      // Sort by date desc
+      allSales.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      const limitedSales = allSales.slice(0, 50);
+
+      setSalesData(limitedSales);
+      setCachedData('salesData', limitedSales);
+    } catch (error) {
+      console.warn("Error fetching sales data (using mock):", error);
+      setSalesData([]);
+      setCachedData('salesData', []);
+
+      if (error.code !== 'permission-denied' && error.code !== 'unavailable') {
+        toast({
+          title: 'Error loading sales data',
+          description: error.message,
+          variant: 'destructive'
+        });
+      }
     } finally {
       setLoading(false);
       setCacheLoading('salesData', false);
@@ -83,48 +88,27 @@ const SalesHistory = () => {
 
     setCacheLoading('stats', true);
     try {
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
+      const querySnapshot = await getDocs(collection(db, 'orders'));
+      const orders = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      if (!isConfigured) {
-        const mockStats = {
-          totalRevenue: 70.50,
-          totalOrders: 2,
-          topProduct: { name: "Bread", quantity: 2 }
-        };
-        setStats(mockStats);
-        setCachedData('stats', mockStats);
-        return;
-      }
+      const totalRevenue = orders.reduce((sum, order) => sum + parseFloat(order.total_price || 0), 0);
+      const totalOrders = orders.length;
 
-      // Get total orders and revenue
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('total_price');
-
-      const totalRevenue = orders?.reduce((sum, order) => sum + parseFloat(order.total_price), 0) || 0;
-      const totalOrders = orders?.length || 0;
-
-      // Get top product
-      const { data: orderItems } = await supabase
-        .from('order_items')
-        .select(`
-          product_id,
-          quantity,
-          products (
-            name
-          )
-        `);
-
+      // Calculate top product
       const productSales = {};
-      orderItems?.forEach(item => {
-        if (!productSales[item.product_id]) {
-          productSales[item.product_id] = {
-            name: item.products?.name,
-            quantity: 0
-          };
+      orders.forEach(order => {
+        if (order.items && Array.isArray(order.items)) {
+          order.items.forEach(item => {
+            const productId = item.product_id;
+            if (!productSales[productId]) {
+              productSales[productId] = {
+                name: item.products?.name || 'Unknown',
+                quantity: 0
+              };
+            }
+            productSales[productId].quantity += item.quantity;
+          });
         }
-        productSales[item.product_id].quantity += item.quantity;
       });
 
       const topProduct = Object.values(productSales).sort((a, b) => b.quantity - a.quantity)[0];
@@ -138,6 +122,14 @@ const SalesHistory = () => {
       setCachedData('stats', statsData);
     } catch (error) {
       console.error('Error fetching stats:', error);
+      // Mock stats if fail (e.g. permission error)
+      const mockStats = {
+        totalRevenue: 70.50,
+        totalOrders: 2,
+        topProduct: { name: "Bread", quantity: 2 }
+      };
+      setStats(mockStats);
+      setCachedData('stats', mockStats);
     } finally {
       setCacheLoading('stats', false);
     }

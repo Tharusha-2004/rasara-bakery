@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Database, Wifi, WifiOff } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
 import { useToast } from '@/components/ui/use-toast';
 
 const ConnectionStatus = () => {
@@ -13,27 +14,23 @@ const ConnectionStatus = () => {
 
     const checkConnection = async () => {
         try {
-            const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-                !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
-
-            if (!isConfigured) {
-                setStatus('demo');
+            // Check if Firebase is configured (dummy check for now since we use a real file)
+            // In a real app, we might check if apiKey is present in config
+            if (!db) {
+                setStatus('disconnected');
                 return;
             }
 
             // Try a lightweight query to check connection
-            const { error } = await supabase.from('products').select('count', { count: 'exact', head: true });
-
-            if (error) {
-                console.error('Connection check failed:', error);
-                setStatus('disconnected');
-                toast({
-                    title: 'Database Connection Failed',
-                    description: 'Could not connect to Supabase. Using local mode.',
-                    variant: 'destructive',
-                });
-            } else {
+            // We'll try to fetch 1 product, just to see if we can reach Firestore
+            try {
+                await getDocs(collection(db, 'products'));
                 setStatus('connected');
+            } catch (e) {
+                console.warn("Firestore connection check failed, assuming demo/offline or permission issue", e);
+                // If permission denied, we are technically connected but restricted.
+                // For this UI, we might still show 'connected' or 'demo'
+                setStatus('demo');
             }
         } catch (error) {
             console.error('Connection check error:', error);

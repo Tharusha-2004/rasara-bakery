@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Upload } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { db, storage } from '@/lib/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,73 +36,51 @@ const EditProductModal = ({ product, onClose, onSuccess }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file size (limit to 800KB for localStorage)
-    if (file.size > 800 * 1024) {
-      const errorMsg = "Image too large for local demo! Please upload an image smaller than 800KB.";
-      alert(errorMsg);
+    // Check file size (limit to 2MB)
+    if (file.size > 2 * 1024 * 1024) {
       toast({
         title: 'File too large',
-        description: errorMsg,
+        description: "Please upload an image smaller than 2MB.",
         variant: 'destructive'
       });
       return;
     }
 
     try {
-      // FORCE DEMO MODE: specific check to ensure we always use local storage if not properly configured
-      // or if we catch an RLS error from a previous attempt
-      const shouldUseLocalStorage = true;
-
-      if (shouldUseLocalStorage) {
-        // Convert image to base64 for localStorage persistence
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setFormData(prev => ({ ...prev, image_url: reader.result }));
-          toast({
-            title: 'Image Selected',
-            description: 'Image will be stored locally',
-          });
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      // Unreachable code for now, but kept for future real backend integration
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
-
-      if (!isConfigured) {
-        // ... (existing logic)
-      }
-
-      // For Supabase mode: upload to storage
+      // Firebase Storage upload
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const storageRef = ref(storage, `product-images/${fileName}`);
 
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
-        .upload(filePath, file);
+      // Show preview while uploading
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, image_url: reader.result }));
+      };
+      reader.readAsDataURL(file);
 
-      if (uploadError) throw uploadError;
+      // Upload to Firebase
+      const snapshot = await uploadBytes(storageRef, file);
+      const publicUrl = await getDownloadURL(snapshot.ref);
 
-      const { data } = supabase.storage
-        .from('product-images')
-        .getPublicUrl(filePath);
-
-      setFormData(prev => ({ ...prev, image_url: data.publicUrl }));
+      setFormData(prev => ({ ...prev, image_url: publicUrl }));
 
       toast({
         title: 'Image Uploaded',
         description: 'Product image has been updated',
       });
     } catch (error) {
-      alert("Error uploading image: " + error.message);
-      toast({
-        title: 'Upload Failed',
-        description: error.message,
-        variant: 'destructive'
-      });
+      console.error("Upload failed", error);
+      // Fallback to local base64 for demo
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, image_url: reader.result }));
+        toast({
+          title: 'Image Selected (Local)',
+          description: 'Image stored locally (Firebase upload failed)',
+        });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -109,62 +89,45 @@ const EditProductModal = ({ product, onClose, onSuccess }) => {
     setLoading(true);
 
     try {
-      const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-        !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
+      const updatedData = {
+        name: formData.name,
+        description: formData.description,
+        price: parseFloat(formData.price),
+        stock_quantity: parseInt(formData.stock_quantity),
+        image_url: formData.image_url
+      };
 
-      if (!isConfigured) {
-        // Demo mode: update in localStorage
-        const storedProducts = localStorage.getItem('bakery_products');
-        if (storedProducts) {
-          const products = JSON.parse(storedProducts);
-          const updatedProducts = products.map(p =>
-            p.id === product.id
-              ? {
-                ...p,
-                name: formData.name,
-                description: formData.description,
-                price: parseFloat(formData.price),
-                stock_quantity: parseInt(formData.stock_quantity),
-                image_url: formData.image_url
-              }
-              : p
-          );
-          localStorage.setItem('bakery_products', JSON.stringify(updatedProducts));
-
-          toast({
-            title: 'Product Updated (Demo Mode)',
-            description: `${formData.name} has been updated in local storage`,
-          });
-
-          onSuccess();
-          onClose();
-          setLoading(false);
-          return;
-        }
+      // Try updating Firestore
+      try {
+        const productRef = doc(db, 'products', product.id);
+        await updateDoc(productRef, updatedData);
+        toast({
+          title: 'Product Updated',
+          description: `${formData.name} has been updated successfully`,
+        });
+      } catch (error) {
+        console.warn("Firestore update failed, using local storage", error);
+        toast({
+          title: 'Product Updated (Local)',
+          description: `${formData.name} updated in local storage (Firestore failed)`,
+        });
       }
 
-      const { error } = await supabase
-        .from('products')
-        .update({
-          name: formData.name,
-          description: formData.description,
-          price: parseFloat(formData.price),
-          stock_quantity: parseInt(formData.stock_quantity),
-          image_url: formData.image_url
-        })
-        .eq('id', product.id);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Product Updated',
-        description: `${formData.name} has been updated successfully`,
-      });
+      // ALWAYS Update LocalStorage for hybrid/demo mode consistency
+      const storedProducts = localStorage.getItem('bakery_products');
+      if (storedProducts) {
+        const products = JSON.parse(storedProducts);
+        const updatedProducts = products.map(p =>
+          p.id === product.id
+            ? { ...p, ...updatedData }
+            : p
+        );
+        localStorage.setItem('bakery_products', JSON.stringify(updatedProducts));
+      }
 
       onSuccess();
       onClose();
     } catch (error) {
-      alert("Error saving: " + error.message);
       toast({
         title: 'Error updating product',
         description: error.message,
