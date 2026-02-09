@@ -30,17 +30,48 @@ const StockManagement = () => {
 
     setCacheLoading('products', true);
     try {
-      const querySnapshot = await getDocs(collection(db, 'products'));
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let firestoreData = [];
+      try {
+        const querySnapshot = await getDocs(collection(db, 'products'));
+        firestoreData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } catch (e) {
+        console.warn("Firestore fetch failed", e);
+      }
+
+      // Start with Firestore products
+      const finalProducts = [...firestoreData];
+
+      // Merge local storage products
+      const storedProducts = localStorage.getItem('bakery_products');
+      if (storedProducts) {
+        try {
+          const localItems = JSON.parse(storedProducts);
+          localItems.forEach(localP => {
+            const exists = finalProducts.some(fp => fp.id === localP.id || fp.name === localP.name);
+            if (!exists) {
+              finalProducts.push({ ...localP, isLocal: true });
+            }
+          });
+        } catch (e) {
+          console.error("Error parsing local products", e);
+        }
+      }
+
+      // Merge Mock Products (Defaults)
+      mockProducts.forEach(mockP => {
+        const exists = finalProducts.some(p => p.id === mockP.id || p.name === mockP.name);
+        if (!exists) {
+          finalProducts.push({ ...mockP, isMock: true });
+        }
+      });
 
       // Sort by name
-      data.sort((a, b) => a.name.localeCompare(b.name));
+      finalProducts.sort((a, b) => a.name.localeCompare(b.name));
 
-      if (data && data.length > 0) {
-        setProducts(data);
-        setCachedData('products', data);
+      if (finalProducts.length > 0) {
+        setProducts(finalProducts);
+        setCachedData('products', finalProducts);
       } else {
-        // Fallback to mock
         setProducts(mockProducts);
         setCachedData('products', mockProducts);
       }
