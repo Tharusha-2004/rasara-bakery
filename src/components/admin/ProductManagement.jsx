@@ -75,9 +75,14 @@ const ProductManagement = () => {
       }
 
       if (error.code !== 'permission-denied' && error.code !== 'unavailable') {
+        let description = error.message;
+        if (error.message && (error.message.includes('blocked') || error.message.includes('network'))) {
+          description = "Connection blocked. Please disable ad-blockers or check your connection.";
+        }
+
         toast({
           title: 'Error loading products',
-          description: error.message,
+          description: description,
           variant: 'destructive'
         });
       }
@@ -137,47 +142,21 @@ const ProductManagement = () => {
           <Button
             variant="outline"
             onClick={async () => {
-              if (confirm('This will reset all product data to defaults. Your added products will be lost. Continue?')) {
-                // ... existing logic ...
+              if (confirm('This will reset all product data to defaults (Local Storage only). Your added products will be lost. Continue?')) {
                 setLoading(true);
                 try {
-                  const isConfigured = import.meta.env.VITE_SUPABASE_URL &&
-                    !import.meta.env.VITE_SUPABASE_URL.includes('your_project_url');
-
-                  if (!isConfigured) {
-                    localStorage.removeItem('bakery_products');
-                    window.location.reload();
-                    return;
-                  }
-
-                  // ... rest of logic ...
-                  const { error: deleteError } = await supabase
-                    .from('products')
-                    .delete()
-                    .gt('id', 0);
-
-                  if (deleteError) throw deleteError;
-
-                  const productsToInsert = mockProducts.map(({ id, category, ...rest }) => ({
-                    ...rest,
-                    price: parseFloat(rest.price),
-                    stock_quantity: parseInt(rest.stock_quantity)
-                  }));
-
-                  const { error: insertError } = await supabase
-                    .from('products')
-                    .insert(productsToInsert);
-
-                  if (insertError) throw insertError;
+                  // Simply clear local storage and reload to force mock data or empty state
+                  localStorage.removeItem('bakery_products');
+                  invalidateCache('products');
 
                   toast({
                     title: 'Defaults Restored',
-                    description: 'Product database has been reset to default values.',
+                    description: 'Local product data has been reset.',
                   });
 
-                  fetchProducts();
+                  // Reload to re-initialize with mock data if configured in fetchProducts
+                  window.location.reload();
                 } catch (error) {
-                  // ... error handling ...
                   console.error('Error restoring defaults:', error);
                   toast({
                     title: 'Error restoring defaults',

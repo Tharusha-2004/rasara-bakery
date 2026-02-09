@@ -56,6 +56,14 @@ const AddProductForm = ({ onClose, onSuccess }) => {
       });
     } catch (error) {
       console.error('Upload error:', error);
+
+      let errorMessage = 'Image stored locally (Firebase upload failed)';
+      if (error.code === 'storage/unauthorized') {
+        errorMessage = 'Permission denied. Check Firebase Storage rules.';
+      } else if (error.message && (error.message.includes('blocked') || error.message.includes('network'))) {
+        errorMessage = 'Upload blocked. Please disable ad-blockers.';
+      }
+
       // Fallback to local base64 for demo
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -63,7 +71,8 @@ const AddProductForm = ({ onClose, onSuccess }) => {
         setFormData(prev => ({ ...prev, image_url: base64String }));
         toast({
           title: 'Image Selected (Local)',
-          description: 'Image stored locally (Firebase upload failed)',
+          description: errorMessage,
+          variant: 'warning',
         });
       };
       reader.readAsDataURL(file);
@@ -93,9 +102,15 @@ const AddProductForm = ({ onClose, onSuccess }) => {
         });
       } catch (error) {
         console.warn("Firestore add failed, using local storage", error);
+
+        let description = `${formData.name} added to local storage (Firestore failed)`;
+        if (error.message && (error.message.includes('blocked') || error.message.includes('network'))) {
+          description = `${formData.name} added locally. Firestore blocked (check ad-blocker).`;
+        }
+
         toast({
           title: 'Product Added (Local)',
-          description: `${formData.name} added to local storage (Firestore failed)`,
+          description: description,
         });
       }
 
