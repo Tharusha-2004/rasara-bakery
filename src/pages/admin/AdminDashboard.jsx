@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Helmet } from 'react-helmet';
+import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { Package, BarChart3, ShoppingCart, TrendingUp } from 'lucide-react';
 import { AdminDataProvider } from '@/contexts/AdminDataContext';

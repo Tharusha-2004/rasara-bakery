@@ -201,24 +201,22 @@ const OrderManagement = () => {
                     Rs.{parseFloat(order.total_price).toFixed(2)}
                   </td>
                   <td className="py-3 px-4">
-                    <td className="py-3 px-4">
-                      <div className="relative inline-block">
-                        <select
-                          value={order.status}
-                          onChange={(e) => updateOrderStatus(order.id, e.target.value)}
-                          className={`appearance-none pl-3 pr-8 py-1 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-amber-500 transition-colors ${getStatusColor(order.status)}`}
-                        >
-                          <option value="pending" className="text-gray-900 bg-white">Pending</option>
-                          <option value="completed" className="text-gray-900 bg-white">Completed</option>
-                          <option value="delivered" className="text-gray-900 bg-white">Delivered</option>
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                          <svg className={`w-3 h-3 ${order.status === 'pending' ? 'text-yellow-700 dark:text-yellow-400' : order.status === 'completed' ? 'text-blue-700 dark:text-blue-400' : 'text-green-700 dark:text-green-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
+                    <div className="relative inline-block">
+                      <select
+                        value={order.status}
+                        onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                        className={`appearance-none pl-3 pr-8 py-1 rounded-full text-xs font-medium border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-amber-500 transition-colors ${getStatusColor(order.status)}`}
+                      >
+                        <option value="pending" className="text-gray-900 bg-white">Pending</option>
+                        <option value="completed" className="text-gray-900 bg-white">Completed</option>
+                        <option value="delivered" className="text-gray-900 bg-white">Delivered</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                        <svg className={`w-3 h-3 ${order.status === 'pending' ? 'text-yellow-700 dark:text-yellow-400' : order.status === 'completed' ? 'text-blue-700 dark:text-blue-400' : 'text-green-700 dark:text-green-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
                       </div>
-                    </td>
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-sm text-gray-600 dark:text-gray-400">
                     {new Date(order.created_at).toLocaleDateString()}
