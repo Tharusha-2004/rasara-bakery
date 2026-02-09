@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, AlertCircle } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { mockProducts } from '@/data/mockProducts';
@@ -44,22 +44,36 @@ const ProductManagement = () => {
     setCacheLoading('products', true);
     try {
       const querySnapshot = await getDocs(collection(db, 'products'));
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const firestoreProducts = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      if (data && data.length > 0) {
-        setProducts(data);
-        setCachedData('products', data);
-      } else {
-        // Fallback to mock data/local storage if Firestore is empty or fails
-        const storedProducts = localStorage.getItem('bakery_products');
-        if (storedProducts) {
-          const parsedProducts = JSON.parse(storedProducts);
-          setProducts(parsedProducts);
-          setCachedData('products', parsedProducts);
-        } else {
-          setProducts(mockProducts);
-          setCachedData('products', mockProducts);
+      // Fetch local storage products to merge (in case some were added offline/locally)
+      const storedProducts = localStorage.getItem('bakery_products');
+      let localProducts = [];
+      if (storedProducts) {
+        try {
+          localProducts = JSON.parse(storedProducts);
+        } catch (e) {
+          console.error("Error parsing local products", e);
         }
+      }
+
+      // Merge: Start with Firestore products
+      const mergedProducts = [...firestoreProducts];
+
+      // Add local products that aren't in Firestore (by ID or Name)
+      localProducts.forEach(localP => {
+        const existsInFirestore = mergedProducts.some(fp => fp.id === localP.id || fp.name === localP.name);
+        if (!existsInFirestore) {
+          mergedProducts.push({ ...localP, isLocal: true });
+        }
+      });
+
+      if (mergedProducts.length > 0) {
+        setProducts(mergedProducts);
+        setCachedData('products', mergedProducts);
+      } else {
+        setProducts(mockProducts);
+        setCachedData('products', mockProducts);
       }
     } catch (error) {
       console.warn("Firestore error, falling back to local/mock:", error);
@@ -139,6 +153,47 @@ const ProductManagement = () => {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Products</h2>
         <div className="flex gap-2">
+          {products.some(p => p.isLocal) && (
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const localItems = products.filter(p => p.isLocal);
+                  let syncedCount = 0;
+
+                  for (const item of localItems) {
+                    // Remove isLocal and id (let Firestore generate ID)
+                    const { isLocal, id, ...productData } = item;
+                    await addDoc(collection(db, 'products'), productData);
+                    syncedCount++;
+                  }
+
+                  toast({
+                    title: 'Sync Complete',
+                    description: `Successfully synced ${syncedCount} products to cloud.`,
+                  });
+
+                  // Clear local storage duplicates (optional, or just refresh)
+                  localStorage.removeItem('bakery_products');
+                  fetchProducts();
+
+                } catch (error) {
+                  console.error("Sync error", error);
+                  toast({
+                    title: 'Sync Failed',
+                    description: error.message,
+                    variant: 'destructive'
+                  });
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="bg-green-50 text-green-600 hover:bg-green-100 border-green-200"
+            >
+              Sync {products.filter(p => p.isLocal).length} Local Items
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={async () => {
@@ -227,7 +282,14 @@ const ProductManagement = () => {
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <div className="font-medium text-gray-900 dark:text-white">{product.name}</div>
+                    <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                      {product.name}
+                      {product.isLocal && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200" title="This product is only saved locally">
+                          LOCAL
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-gray-500 dark:text-gray-400 line-clamp-1">{product.description}</div>
                   </td>
                   <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">

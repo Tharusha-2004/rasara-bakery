@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { motion } from 'framer-motion';
-import { ShoppingCart, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShoppingCart, AlertCircle, Star } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import { useCart } from '@/contexts/CartContext';
@@ -10,11 +10,10 @@ import { Button } from '@/components/ui/button';
 
 import { mockProducts } from '@/data/mockProducts';
 
-// ... imports
-
 const HomePage = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState("All");
   const { addToCart } = useCart();
   const { toast } = useToast();
 
@@ -23,29 +22,57 @@ const HomePage = () => {
   }, []);
 
   const fetchProducts = async () => {
+    let firestoreData = [];
     try {
       const querySnapshot = await getDocs(collection(db, 'products'));
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      if (data && data.length > 0) {
-        setProducts(data);
-      } else {
-        setProducts(mockProducts);
-      }
+      firestoreData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
-      console.warn('Error loading products from Firebase, using mock data:', error);
-      setProducts(mockProducts);
-      // Only show toast if it's not a permission error (which is expected if config is missing)
-      if (error.code !== 'permission-denied' && error.code !== 'unavailable') {
-        toast({
-          title: 'Demo Mode',
-          description: 'Showing sample products (database connection failed).',
-        });
-      }
-    } finally {
-      setLoading(false);
+      console.warn('Error loading products from Firebase:', error);
     }
+
+    let finalProducts = [...firestoreData];
+
+    const storedProducts = localStorage.getItem('bakery_products');
+    if (storedProducts) {
+      try {
+        const localItems = JSON.parse(storedProducts);
+        localItems.forEach(localP => {
+          const exists = finalProducts.some(p => p.id === localP.id || p.name === localP.name);
+          if (!exists) {
+            finalProducts.push({ ...localP, isLocal: true });
+          }
+        });
+      } catch (e) {
+        console.error("Error parsing local products", e);
+      }
+    }
+
+    mockProducts.forEach(mockP => {
+      const exists = finalProducts.some(p => p.id === mockP.id || p.name === mockP.name);
+      if (!exists) {
+        finalProducts.push({ ...mockP, isMock: true });
+      }
+    });
+
+    setProducts(finalProducts);
+    setLoading(false);
   };
+
+  // Extract categories dynamically
+  const categories = useMemo(() => {
+    const cats = ["All"];
+    products.forEach(p => {
+      if (p.category && !cats.includes(p.category)) {
+        cats.push(p.category);
+      }
+    });
+    return cats;
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    if (activeCategory === "All") return products;
+    return products.filter(p => p.category === activeCategory);
+  }, [activeCategory, products]);
 
   const handleAddToCart = (product) => {
     if (product.stock_quantity <= 0) {
@@ -78,111 +105,134 @@ const HomePage = () => {
       </Helmet>
 
       <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        {/* Hero Section */}
-        <section className="relative h-[500px] overflow-hidden">
+        {/* Simplified Hero Section */}
+        <section className="relative h-[400px] overflow-hidden">
           <div className="absolute inset-0">
-            <img
-              src="https://images.unsplash.com/photo-1686515266396-080c4939e6b4"
-              alt="Rasara Bakery"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/30" />
+            <img src="https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop" alt="Bakery Hero" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/50" />
           </div>
-
-          <div className="relative h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
+          <div className="relative h-full flex flex-col justify-center items-center text-center text-white px-4">
+            <motion.h1
+              initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              className="text-white max-w-2xl"
+              className="text-5xl md:text-7xl font-bold mb-4 tracking-tight"
             >
-              <h1 className="text-5xl md:text-6xl font-bold mb-4">
-                Rasara Bakery
-              </h1>
-              <p className="text-xl md:text-2xl mb-6">
-                Fresh baked goods made with passion and tradition
-              </p>
-              <p className="text-lg opacity-90">
-                Discover our daily selection of artisan breads, pastries, and desserts crafted with the finest ingredients
-              </p>
-            </motion.div>
+              Rasara Bakery
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-xl md:text-2xl font-light text-amber-100"
+            >
+              Artisan Bakes & Sweet Delights
+            </motion.p>
           </div>
         </section>
 
-        {/* Products Section */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-8">Our Products</h2>
-          </motion.div>
+        {/* Gallery Section */}
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+
+          {/* Category Filter Tabs */}
+          <div className="flex flex-wrap justify-center gap-3 mb-10">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 transform hover:scale-105 ${activeCategory === cat
+                    ? 'bg-amber-600 text-white shadow-lg scale-105 ring-2 ring-amber-600 ring-offset-2 dark:ring-offset-slate-900'
+                    : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                  }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
 
           {loading ? (
-            <div className="flex justify-center items-center py-20">
+            <div className="flex justify-center py-20">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600"></div>
             </div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-20">
-              <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-xl text-gray-600">No products available at the moment</p>
+          ) : filteredProducts.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No products found in this category.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {products.map((product, index) => {
-                const stockStatus = getStockStatus(product.stock_quantity);
+            <motion.div
+              layout
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
+            >
+              <AnimatePresence>
+                {filteredProducts.map((product) => {
+                  const stockStatus = getStockStatus(product.stock_quantity);
+                  return (
+                    <motion.div
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.3 }}
+                      key={product.id}
+                      className="group relative bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300"
+                    >
+                      {/* Image Container with Zoom Effect */}
+                      <div className="aspect-[4/3] overflow-hidden">
+                        {product.image_url ? (
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-amber-50 dark:bg-slate-700">
+                            <ShoppingCart className="w-12 h-12 text-amber-200" />
+                          </div>
+                        )}
+                        {/* Overlay Gradient on Hover */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-                return (
-                  <motion.div
-                    key={product.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1"
-                  >
-                    <div className="aspect-square overflow-hidden bg-gray-100 dark:bg-slate-700">
-                      {product.image_url ? (
-                        <img
-                          src={product.image_url}
-                          alt={product.name}
-                          className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-100 to-orange-100 dark:from-slate-700 dark:to-slate-600">
-                          <ShoppingCart className="w-20 h-20 text-amber-300" />
+                        {/* Quick Add Button (appears on hover) */}
+                        <div className="absolute bottom-4 right-4 translate-y-10 group-hover:translate-y-0 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                          <Button
+                            size="icon"
+                            className="rounded-full bg-white text-amber-600 hover:bg-amber-100 hover:text-amber-700 shadow-lg"
+                            onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
+                            disabled={product.stock_quantity === 0}
+                          >
+                            <ShoppingCart className="w-5 h-5" />
+                          </Button>
                         </div>
-                      )}
-                    </div>
-
-                    <div className="p-4 bg-white dark:bg-slate-800">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{product.name}</h3>
-                      <p className="text-gray-600 dark:text-gray-300 text-sm mb-3 line-clamp-2">
-                        {product.description || 'Delicious baked goods'}
-                      </p>
-
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-2xl font-bold text-amber-600">
-                          Rs.{parseFloat(product.price).toFixed(2)}
-                        </span>
-                        <span className={`text-sm font-medium ${stockStatus.color}`}>
-                          {stockStatus.text}
-                        </span>
                       </div>
 
-                      <Button
-                        onClick={() => handleAddToCart(product)}
-                        disabled={product.stock_quantity === 0}
-                        className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white transition-all duration-300"
-                      >
-                        <ShoppingCart className="w-4 h-4 mr-2" />
-                        Add to Cart
-                      </Button>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+                      {/* Content */}
+                      <div className="p-5">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-bold text-lg text-gray-900 dark:text-white line-clamp-1">{product.name}</h3>
+                          <div className="flex items-center text-amber-400 text-xs">
+                            <Star className="w-3 h-3 fill-current" />
+                            <span className="ml-1">4.8</span>
+                          </div>
+                        </div>
+
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 line-clamp-2 min-h-[40px]">
+                          {product.description || 'Delightful artisan pastry.'}
+                        </p>
+
+                        <div className="flex items-center justify-between mt-auto">
+                          <span className="text-xl font-bold text-gray-900 dark:text-white">
+                            Rs.{parseFloat(product.price).toFixed(2)}
+                          </span>
+                          <span className={`text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 dark:bg-slate-700 ${stockStatus.color}`}>
+                            {stockStatus.text}
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
           )}
         </section>
       </div>
