@@ -68,6 +68,17 @@ const ProductManagement = () => {
         }
       });
 
+      // Merge Mock Products (Defaults)
+      mockProducts.forEach(mockP => {
+        const exists = mergedProducts.some(p => p.id === mockP.id || p.name === mockP.name);
+        if (!exists) {
+          mergedProducts.push({ ...mockP, isMock: true });
+        }
+      });
+
+      // Sort by name
+      mergedProducts.sort((a, b) => a.name.localeCompare(b.name));
+
       if (mergedProducts.length > 0) {
         setProducts(mergedProducts);
         setCachedData('products', mergedProducts);
