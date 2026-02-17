@@ -105,33 +105,97 @@ const HomePage = () => {
       </Helmet>
 
       <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        {/* Simplified Hero Section */}
-        <section className="relative h-[400px] overflow-hidden">
+        {/* Hero Section with Animated Baker Character */}
+        <section className="relative h-[450px] md:h-[500px] overflow-hidden">
           <div className="absolute inset-0">
             <img src="https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop" alt="Bakery Hero" className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/50" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-black/30" />
           </div>
-          <div className="relative h-full flex flex-col justify-center items-center text-center text-white px-4">
-            <motion.h1
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-5xl md:text-7xl font-bold mb-4 tracking-tight"
+          <div className="relative h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+            {/* Left Side - Text Content */}
+            <div className="flex flex-col justify-center text-white z-10">
+              <motion.h1
+                initial={{ opacity: 0, x: -40 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.7, ease: 'easeOut' }}
+                className="text-5xl md:text-7xl font-bold mb-4 tracking-tight"
+              >
+                Rasara Bakery
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3, duration: 0.6 }}
+                className="text-xl md:text-2xl font-light text-amber-100 mb-6"
+              >
+                Artisan Bakes & Sweet Delights
+              </motion.p>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6, duration: 0.5 }}
+              >
+                <a
+                  href="#products"
+                  className="inline-block px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300"
+                >
+                  Browse Our Menu
+                </a>
+              </motion.div>
+            </div>
+
+            {/* Right Side - Animated 3D Baker Character */}
+            <motion.div
+              className="hidden md:flex items-end justify-center z-10"
+              initial={{ opacity: 0, scale: 0.3, rotate: -10 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              transition={{
+                type: 'spring',
+                stiffness: 200,
+                damping: 15,
+                delay: 0.4,
+              }}
             >
-              Rasara Bakery
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="text-xl md:text-2xl font-light text-amber-100"
-            >
-              Artisan Bakes & Sweet Delights
-            </motion.p>
+              <motion.img
+                src="/images/baker-character.png"
+                alt="Rasara Bakery Chef"
+                className="h-[300px] md:h-[380px] lg:h-[420px] drop-shadow-[0_10px_30px_rgba(0,0,0,0.4)] cursor-pointer select-none"
+                style={{ filter: 'drop-shadow(0 10px 25px rgba(245, 158, 11, 0.3))' }}
+                animate={{
+                  y: [0, -15, 0],
+                }}
+                transition={{
+                  y: {
+                    duration: 3,
+                    repeat: Infinity,
+                    repeatType: 'loop',
+                    ease: 'easeInOut',
+                  },
+                }}
+                whileHover={{
+                  scale: 1.08,
+                  rotate: [0, -3, 3, 0],
+                  transition: { duration: 0.4 },
+                }}
+                whileTap={{ scale: 0.95 }}
+                drag
+                dragConstraints={{ top: -10, bottom: 10, left: -10, right: 10 }}
+                dragElastic={0.1}
+              />
+            </motion.div>
           </div>
+
+          {/* Decorative elements */}
+          <motion.div
+            className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-amber-50 dark:from-slate-950 to-transparent"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+          />
         </section>
 
         {/* Gallery Section */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <section id="products" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
 
           {/* Category Filter Tabs */}
           <div className="flex flex-wrap justify-center gap-3 mb-10">
@@ -140,8 +204,8 @@ const HomePage = () => {
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
                 className={`px-6 py-2 rounded-full text-sm font-medium transition-all duration-300 transform hover:scale-105 ${activeCategory === cat
-                    ? 'bg-amber-600 text-white shadow-lg scale-105 ring-2 ring-amber-600 ring-offset-2 dark:ring-offset-slate-900'
-                    : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                  ? 'bg-amber-600 text-white shadow-lg scale-105 ring-2 ring-amber-600 ring-offset-2 dark:ring-offset-slate-900'
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                   }`}
               >
                 {cat}
