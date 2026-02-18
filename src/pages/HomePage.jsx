@@ -159,7 +159,7 @@ const HomePage = () => {
               <motion.img
                 src="/images/baker-character.png"
                 alt="Rasara Bakery Chef"
-                className="h-[300px] md:h-[380px] lg:h-[420px] drop-shadow-[0_10px_30px_rgba(0,0,0,0.4)] cursor-pointer select-none"
+                className="h-[300px] md:h-[380px] lg:h-[420px] rounded-2xl object-cover shadow-2xl cursor-pointer select-none"
                 style={{ filter: 'drop-shadow(0 10px 25px rgba(245, 158, 11, 0.3))' }}
                 animate={{
                   y: [0, -15, 0],
