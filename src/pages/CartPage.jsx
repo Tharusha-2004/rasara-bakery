@@ -11,8 +11,7 @@ const CartPage = () => {
   const { cartItems, updateQuantity, removeFromCart, getCartTotal, clearCart } = useCart();
 
   const subtotal = getCartTotal();
-  const tax = subtotal * 0.08; // 8% tax
-  const total = subtotal + tax;
+  const total = subtotal;
 
   if (cartItems.length === 0) {
     return (
@@ -147,10 +146,6 @@ const CartPage = () => {
                   <div className="flex justify-between text-gray-600 dark:text-gray-300">
                     <span>Subtotal</span>
                     <span>Rs.{subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                    <span>Tax (8%)</span>
-                    <span>Rs.{tax.toFixed(2)}</span>
                   </div>
                   <div className="border-t dark:border-slate-700 pt-3 flex justify-between text-xl font-bold text-gray-900 dark:text-white">
                     <span>Total</span>

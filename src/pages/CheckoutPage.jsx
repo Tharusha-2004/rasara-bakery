@@ -23,8 +23,7 @@ const CheckoutPage = () => {
   });
 
   const subtotal = getCartTotal();
-  const tax = subtotal * 0.08;
-  const total = subtotal + tax;
+  const total = subtotal;
 
   const handleChange = (e) => {
     setFormData(prev => ({
@@ -222,10 +221,6 @@ const CheckoutPage = () => {
                 <div className="flex justify-between text-gray-600 dark:text-gray-300">
                   <span>Subtotal</span>
                   <span>Rs.{subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-600 dark:text-gray-300">
-                  <span>Tax (8%)</span>
-                  <span>Rs.{tax.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold text-gray-900 dark:text-white pt-2">
                   <span>Total</span>
